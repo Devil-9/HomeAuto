@@ -1,0 +1,92 @@
+#include "EmonLib.h"
+#include <WiFi.h>
+#include <HTTPClient.h>
+
+EnergyMonitor emon;
+#define vCalibration 106.8
+#define currCalibration 0.52
+  
+const char* ssid = "309";
+const char* password =  "avnish309";
+
+float kWh = 0;
+unsigned long lastmillis = millis();
+ 
+
+    
+    
+
+  
+void setup() {
+  
+  Serial.begin(115200);
+  delay(4000);//Delay needed before calling the WiFi.begin
+  emon.voltage(35, vCalibration, 1.7); // Voltage: input pin, calibration, phase_shift
+  emon.current(34, currCalibration); // Current: input pin, calibration.
+  
+  WiFi.begin(ssid, password); 
+  
+  while (WiFi.status() != WL_CONNECTED) { //Check for the connection
+    delay(1000);
+    Serial.println("Connecting to WiFi..");
+  }
+  
+  Serial.println("Connected to the WiFi network");
+  
+}
+  
+void loop() {
+  
+ if(WiFi.status()== WL_CONNECTED){   //Check WiFi connection status
+  
+   HTTPClient http;   
+  
+   http.begin("https://iiitliot.herokuapp.com/modify");  //Specify destination for HTTP request
+   http.addHeader("Content-Type", "application/json");             //Specify content-type header
+
+   emon.calcVI(20, 2000);
+    Serial.print("Vrms: ");
+    Serial.print(emon.Vrms, 2);
+    Serial.print("V");
+    Serial.print("\tIrms: ");
+    Serial.print(emon.Irms, 4);
+    Serial.print("A");
+    Serial.print("\tPower: ");
+    Serial.print(emon.apparentPower, 4);
+    Serial.print("W");
+    Serial.print("\tkWh: ");
+    kWh = kWh + emon.apparentPower*(millis()-lastmillis)/3600000000.0;
+    Serial.print(kWh, 4);
+    Serial.println("kWh");
+    lastmillis = millis();
+
+    String jsonotp = "{\"sensor\" : \"abc\", \"reading\": \"123\", \"current\": \""+String(emon.Irms)+ "\", \"voltage\": \""+String(emon.Vrms)+ "\", \"power\":\""+String(emon.apparentPower)+ "\" }";
+  
+   int httpResponseCode = http.POST(jsonotp);   //Send the actual POST request
+   Serial.print("\n\n"+jsonotp+"\n\n");
+  
+   if(httpResponseCode>0){
+  
+    String response = http.getString();                       //Get the response to the request
+  
+    Serial.println(httpResponseCode);   //Print return code
+    Serial.println(response);           //Print request answer
+  
+   }else{
+  
+    Serial.print("Error on sending POST: ");
+    Serial.println(httpResponseCode);
+  
+   }
+  
+   http.end();  //Free resources
+  
+ }else{
+  
+    Serial.println("Error in WiFi connection");   
+  
+ }
+  
+  delay(10000);  //Send a request every 10 seconds
+  
+}
